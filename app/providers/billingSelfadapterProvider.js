@@ -6,7 +6,8 @@ var fraudSelfAdaptabilityQueue = require("../queue/fraudSelfAdaptabilityQueue");
 var billingSelfAdaptabilityQueue = require("../queue/billingSelfAdaptabilityQueue");
 var paymentRuleUtil = require("../util/paymentRuleUtil");
 
-kafkaClient.suscribe(function (bill) {
+billingSelfAdaptabilityQueue.suscribe(function (sBill) {
+    var bill = JSON.parse(sBill);
     fraudDB.getFraud(bill.order.userId, function (fraud) {
         if (fraud) determineFraudSuspicionProbability(fraud, bill);
         else getFraudSuspicionProbabilityFromBank(bill);
@@ -21,6 +22,8 @@ function getFraudSuspicionProbabilityFromBank(bill) {
 }
 
 function determineFraudSuspicionProbability(fraud, bill) {
+    console.log("fraud", fraud);
+    console.log("bill", bill);
     // aquí se debe determinar si la sospecha es > 90% o > 50 y realizar las acciones respectivas
     if (fraud.probability >= fraudUtil.UPPER_LIMIT_SUSPISSION_PROBABILITY) {
         fraudDetectedManager(bill);
@@ -34,14 +37,20 @@ function determineFraudSuspicionProbability(fraud, bill) {
 function fraudDetectedManager(bill) {
     // 1 escribir en la cola de fraudes para que el servicio de fraudes le dé manejo
     fraudSelfAdaptabilityQueue.notify(bill);
-    // 2 escribir datos de la transacción en la tabla de reglas y la acción
+    // 2 escribir el fraude en el tópico de payments
+    var fraudFieldsToTopic = bill.ID + "," + bill.createdDate + "," + true;
+    kafkaClient.notify(fraudFieldsToTopic);
+    // 3 escribir datos de la transacción en la tabla de reglas y la acción
     paymentRuleUtil.createPaymentRule(bill, fraudSelfAdaptabilityQueue.EXECUTE_FRAUD_ACTION);
 }
 
 function paymentDetectedManager(bill) {
     // 1 escribir en la cola de selfadaptability.execute.payment para el manejo del pago
-    billingSelfAdaptabilityQueue.notify(bill.order);
-    // 2 escribir datos de la transacción en la tabla de reglas y la acción
+    billingSelfAdaptabilityQueue.notify(parseInt(bill.ID));
+    // 2 escribir el fraude en el tópico de payments
+    var fraudFieldsToTopic = bill.ID + "," + bill.createdDate + "," + false;
+    kafkaClient.notify(fraudFieldsToTopic);
+    // 3 escribir datos de la transacción en la tabla de reglas y la acción
     paymentRuleUtil.createPaymentRule(bill, billingSelfAdaptabilityQueue.EXECUTE_PAYMENT_ACTION);
 }
 
