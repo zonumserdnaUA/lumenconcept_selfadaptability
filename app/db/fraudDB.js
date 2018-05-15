@@ -23,7 +23,6 @@ function createFraud(fraud, callback) {
     docClient.put(params, function(err, data) {
         if (err) console.log(err);
         else {
-            console.log("__FRAUD fraud created successfully", fraud);
             if(callback) callback(fraud);
         }
     });
@@ -35,13 +34,11 @@ function getFraud(userID, callback) {
         Key: {"ID": userID}
     };
 
-    console.log("params", params);
-
     docClient.get(params, function(err, data) {
         if (err) {
             console.log("__FRAUD ERROR getting fraud", err, "\n");
         } else {
-            console.log("__FRAUD SUCCEEDED getting fraud", data.Item, "\n");
+            console.log("__FRAUD SUCCEEDED getting KNOWN fraud", data.Item, "\n");
             if(callback) callback(data.Item);
         }
     });

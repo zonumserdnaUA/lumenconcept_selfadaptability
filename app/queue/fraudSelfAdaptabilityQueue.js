@@ -5,7 +5,7 @@ var queueURL = "amqp://vgleryqm:kwDm7WnQvfqeA4RX1DZXfmT-DWTxC3bu@skunk.rmq.cloud
 // public methods
 
 exports.notify = notify;
-exports.EXECUTE_FRAUD_ACTION = requestQueue;
+exports.FRAUD_ACTION = "executeFraud";
 
 // private methods
 
@@ -17,7 +17,7 @@ function notify(data, callback) {
             var sData = JSON.stringify(data);
             console.log("__SelfAdaptability billing sending to...", requestQueue, "\n");
             ch.sendToQueue(q, new Buffer(sData));
-            console.log("__SelfAdaptability status sent", data, "\n");
+            console.log("__SelfAdaptability FRAUD sent", data, "\n");
             if (callback) callback(data);
         });
     });

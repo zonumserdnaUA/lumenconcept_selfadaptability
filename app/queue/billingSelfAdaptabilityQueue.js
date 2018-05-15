@@ -7,7 +7,7 @@ var queueURL = "amqp://vgleryqm:kwDm7WnQvfqeA4RX1DZXfmT-DWTxC3bu@skunk.rmq.cloud
 
 exports.notify = notify;
 exports.suscribe = suscribe;
-exports.EXECUTE_PAYMENT_ACTION = executePaymentQueue;
+exports.PAYMENT_ACTION = "executePayment";
 
 // private methods
 
@@ -34,7 +34,7 @@ function notify(data, callback) {
             var sData = JSON.stringify(data);
             console.log("__SelfAdaptability billing sending to...", executePaymentQueue, "\n");
             ch.sendToQueue(q, new Buffer(sData));
-            console.log("__SelfAdaptability status sent", data, "\n");
+            console.log("__SelfAdaptability PAYMENT sent", data, "\n");
             if (callback) callback(data);
         });
     });

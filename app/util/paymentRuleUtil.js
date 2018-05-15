@@ -9,13 +9,19 @@ exports.createPaymentRule = createPaymentRule;
 function createPaymentRule(bill, action, callback) {
     var paymentRule = {
         ID: generatePaymentRuleId(),
-        bill: bill,
+        userId: bill.order.userId,
+        userLocation: bill.userLocation,
         action: action
     };
 
-    paymentRulesDB.createPaymentRule(paymentRule, function() {
-        if (callback) callback(paymentRule);
+    paymentRulesDB.existPaymentRule(paymentRule, function (bExistPaymentRule) {
+        if (!bExistPaymentRule) {
+            paymentRulesDB.createPaymentRule(paymentRule, function() {
+                if (callback) callback(paymentRule);
+            });
+        }
     });
+
 }
 
 function generatePaymentRuleId() {
