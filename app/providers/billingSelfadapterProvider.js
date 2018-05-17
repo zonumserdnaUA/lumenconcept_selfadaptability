@@ -7,6 +7,8 @@ var billingSelfAdaptabilityQueue = require("../queue/billingSelfAdaptabilityQueu
 var paymentRuleUtil = require("../util/paymentRuleUtil");
 var paymentRulesDB = require("../db/paymentRulesDB");
 var banksSimilarTransactionsUtil = require("../util/banksSimilarTransactionsUtil");
+var billingQueue = require("../queue/billingQueue");
+var request = require("request");
 
 billingSelfAdaptabilityQueue.suscribe(function (sBill) {
     var bill = JSON.parse(sBill);
@@ -27,6 +29,7 @@ function executeRule(paymentRule, bill) {
             break;
         case fraudSelfAdaptabilityQueue.FRAUD_ACTION:
             fraudSelfAdaptabilityQueue.notify(bill);
+            fraudDetectedManager(bill, paymentRule);
             break;
     }
 }
@@ -48,19 +51,20 @@ function getFraudSuspicionProbabilityFromBank(bill) {
 
 function determineFraudSuspicionProbability(fraud, bill) {
     if (fraud.probability >= fraudUtil.UPPER_LIMIT_SUSPISSION_PROBABILITY) {
-        fraudDetectedManager(bill);
+        fraudDetectedManager(bill, fraud);
     } else if (fraud.probability >= fraudUtil.LOWER_LIMIT_SUSPISSION_PROBABILITY) {
-        suspissionDetectedManager(bill);
+        suspissionDetectedManager(bill, fraud);
     } else {
         paymentDetectedManager(bill);
     }
 }
 
-function fraudDetectedManager(bill) {
+function fraudDetectedManager(bill, fraud) {
     fraudSelfAdaptabilityQueue.notify(bill);
     var fraudFieldsToTopic = bill.ID + "," + bill.createdDate + "," + true;
     kafkaClient.notify(fraudFieldsToTopic);
     paymentRuleUtil.createPaymentRule(bill, fraudSelfAdaptabilityQueue.FRAUD_ACTION);
+    sendFraud(bill, fraud);
 }
 
 function paymentDetectedManager(bill) {
@@ -70,12 +74,40 @@ function paymentDetectedManager(bill) {
     paymentRuleUtil.createPaymentRule(bill, billingSelfAdaptabilityQueue.PAYMENT_ACTION);
 }
 
-function suspissionDetectedManager(bill) {
+function suspissionDetectedManager(bill, fraud) {
     banksSimilarTransactionsUtil.isThereSimilarTransactions(bill, function (bIsThereSimilarTransactions) {
         if (bIsThereSimilarTransactions) {
             paymentDetectedManager(bill);
         } else {
-            fraudDetectedManager(bill);
+            fraudDetectedManager(bill, fraud);
         }
     });
+}
+
+function sendFraud(bill, fraud) {
+    var options = {
+        uri: 'https://g0auvp9nmh.execute-api.us-east-2.amazonaws.com/Production/frauds',
+        method: 'POST',
+        json: {
+            "bill": bill,
+            "fraud": fraud
+        }
+    };
+
+    request(options, function (error, response, body) {
+        if (!error && response.statusCode == 200) {
+            notifyBillingFailed(bill.order.id_order);
+        } else {
+            console.log(error);
+        }
+    });
+}
+
+function notifyBillingFailed(orderId) {
+    var data = {
+        state: false,
+        reason: "Payment in fraud",
+        id_order: orderId
+    };
+    billingQueue.notify(data);
 }
