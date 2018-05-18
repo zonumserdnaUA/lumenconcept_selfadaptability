@@ -1,5 +1,6 @@
 var kafkaClient = require("../kafka/kafkaClient");
 var fraudDB = require("../db/fraudDB");
+var batchDB = require("../db/batchDB");
 var fraudBankSuspicion =  require("../mocks/fraudBankSuspicion");
 var fraudUtil = require("../util/fraudUtil");
 var fraudSelfAdaptabilityQueue = require("../queue/fraudSelfAdaptabilityQueue");
@@ -26,6 +27,7 @@ function executeRule(paymentRule, bill) {
     switch(paymentRule.action) {
         case billingSelfAdaptabilityQueue.PAYMENT_ACTION:
             billingSelfAdaptabilityQueue.notify(parseInt(bill.ID));
+            paymentDetectedManager(bill);
             break;
         case fraudSelfAdaptabilityQueue.FRAUD_ACTION:
             fraudSelfAdaptabilityQueue.notify(bill);
@@ -61,17 +63,19 @@ function determineFraudSuspicionProbability(fraud, bill) {
 
 function fraudDetectedManager(bill, fraud) {
     fraudSelfAdaptabilityQueue.notify(bill);
-    var fraudFieldsToTopic = bill.ID + "," + bill.createdDate + "," + true;
-    kafkaClient.notify(fraudFieldsToTopic);
+    batchAndSpeedManager(bill.ID, bill.createdDate, true);
     paymentRuleUtil.createPaymentRule(bill, fraudSelfAdaptabilityQueue.FRAUD_ACTION);
-    sendFraud(bill, fraud);
+    billingQueue.notifyPaymentState({success: false, message: "ALERT! You are in fraud"});
+
+    sendFraudToLambda(bill, fraud);
 }
 
 function paymentDetectedManager(bill) {
     billingSelfAdaptabilityQueue.notify(parseInt(bill.ID));
-    var fraudFieldsToTopic = bill.ID + "," + bill.createdDate + "," + false;
-    kafkaClient.notify(fraudFieldsToTopic);
+    batchAndSpeedManager(bill.ID, bill.createdDate, false);
     paymentRuleUtil.createPaymentRule(bill, billingSelfAdaptabilityQueue.PAYMENT_ACTION);
+
+    billingQueue.notifyPaymentState({success: true, message: "Your bill " + bill.ID + " was created on " + bill.createdDate});
 }
 
 function suspissionDetectedManager(bill, fraud) {
@@ -84,7 +88,15 @@ function suspissionDetectedManager(bill, fraud) {
     });
 }
 
-function sendFraud(bill, fraud) {
+function batchAndSpeedManager(billId, billCreatedDate, isFraud) {
+    var fraudFieldsToSpeed = billId + "," + billCreatedDate + "," + isFraud;
+    kafkaClient.notify(fraudFieldsToSpeed);
+
+    var fraudToBatch = {billId: billId, billCreatedDate: billCreatedDate, isFraud: isFraud};
+    batchDB.createFraud(fraudToBatch);
+}
+
+function sendFraudToLambda(bill, fraud) {
     var options = {
         uri: 'https://g0auvp9nmh.execute-api.us-east-2.amazonaws.com/Production/frauds',
         method: 'POST',

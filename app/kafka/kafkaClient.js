@@ -4,7 +4,7 @@ var kafkaConsumer;
 var kafkaProducer;
 
 const PAYMETN_TOPIC = "lumenconcept.payment";
-const KAFKA_HOST = "157.253.238.226:8089";
+const KAFKA_HOST = "18.204.96.185:8089";
 
 // public methods
 
